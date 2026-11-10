@@ -1,0 +1,35 @@
+module MultipleClock(
+    clk_a: input 'domain_a clock,
+    clk_b: input 'domain_b clock,
+
+    rst_a: input 'domain_a reset,
+    rst_b: input 'domain_b reset,
+
+    a: input 'domain_a logic<8>,
+    b: input 'domain_b logic<8>,
+
+    d: output 'domain_a logic<8>,
+    y: output 'domain_b logic<8>,
+){
+    var q: logic<8>;
+    var t: logic<8>;
+
+    always_ff(clk_a, rst_a){
+        if_reset{
+            q = 0;
+        }else{
+            q = a;
+        }
+    }
+
+    always_ff(clk_b, rst_b){
+        if_reset{
+            t = 0;
+        }else{
+            t = b;
+        }
+    }
+
+    assign d = q;
+    assign y = t;
+}

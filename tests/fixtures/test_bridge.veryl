@@ -1,0 +1,6 @@
+module TestBridge(
+    a: input logic<8>,
+    y: output logic<8>,
+){
+    assign y = a + 1;
+}

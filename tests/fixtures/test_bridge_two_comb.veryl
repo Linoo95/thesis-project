@@ -1,0 +1,18 @@
+module TestTwoComb(
+    a1: input logic<8>,
+    y1: output logic<8>,
+
+    a2: input logic<8>,
+    y2: output logic<8>,
+
+    a3: input logic<8>,
+    y3: output logic<8>,
+
+    a4: input logic<8>,
+    y4: output logic<8>,
+){
+    assign y1 = a1 + 1;
+    assign y2 = a2 + 1;
+    assign y3 = a3 + 1;
+    assign y4 = a4 + 1;
+}

@@ -1,0 +1,6 @@
+module TestBridgeSigned(
+    a: input signed logic<8>,
+    y: output signed logic<8>,
+){
+    assign y = a + 1;
+}

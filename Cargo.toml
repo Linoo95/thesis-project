@@ -1,0 +1,14 @@
+[package]
+name = "hybrid-sim"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+syncrim = { path = "../../syncrim", default-features = false, features = ["components"]}
+veryl-simulator = { path = "../../veryl/crates/simulator" }
+veryl-parser = { path = "../../veryl/crates/parser" }
+veryl-analyzer = { path = "../../veryl/crates/analyzer" }
+veryl-metadata = { path = "../../veryl/crates/metadata" }
+
+serde = { version = "1", features = ["derive"] }
+typetag = "0.2"
