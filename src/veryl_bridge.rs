@@ -1,53 +1,59 @@
-use std::{cell::RefCell, rc::Rc, str::FromStr};
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
 use syncrim::signal::{SignalValue};
-use veryl_analyzer::ir::VarPath;
+
+use veryl_analyzer::symbol::{Direction, TypeKind};
 use veryl_simulator::{Simulator, ir::{Event, Value}};
 
-use crate::{PortDirection, PortType, VerylDesignInfo, VerylPortInfo, convert_syncrim_to_veryl};
+use crate::{PortType, VerylDesignInfo, VerylPortInfo, convert_syncrim_to_veryl};
 
 pub type SharedVerylBridge = Rc<RefCell<VerylBridge>>;
 
 pub struct VerylBridge {
     simulator: Simulator,
-    pub design_info: VerylDesignInfo,
-    clock: Option<Event>,
-    reset: Option<Event>,
+    design_info: VerylDesignInfo,
+    clocks: HashMap<String, Event>,
+    resets: HashMap<String, Event>,
 }
 
 impl VerylBridge {
-
-    pub fn new( simulator: Simulator, design_info:VerylDesignInfo) -> Self {
-        Self {
-            simulator,
-            design_info,
-            clock: None,
-            reset: None,
-        }
-    }
-
-    pub fn with_clock_reset(
+    pub fn new(
         simulator: Simulator,
         design_info: VerylDesignInfo,
-        clock_port: &str,
-        reset_port: &str,
     ) -> Result<Self, String> {
-        let clock = simulator.get_clock(clock_port).ok_or_else(|| {format!("Could not find veryl clock port {clock_port}")})?;
-        let reset = simulator.get_reset(reset_port).ok_or_else(|| {format!("Could not find veryl reset port {reset_port}")})?;
+        let mut clocks = HashMap::new();
+        let mut resets = HashMap::new();
+        for port in &design_info.ports {
+            if port.type_kind.is_clock(){
+                if port.type_kind != TypeKind::Clock {
+                    return Err(format!("Unsupported clock type: {:?}", port.type_kind));
+                }
+                let event = simulator.get_clock(&port.name).ok_or_else(|| {format!("Could not find veryl clock port {}", port.name)})?;
+                clocks.insert(port.name.clone(), event); 
+            }
+            if port.type_kind.is_reset(){
+                if port.type_kind != TypeKind::Reset{
+                    return Err(format!("Unsupported reset type: {:?}", port.type_kind));
+                }
+                let event = simulator.get_reset(&port.name).ok_or_else(|| {format!("Could not find veryl reset port {}", port.name)})?;
+                resets.insert(port.name.clone(), event);       
+            }
+        }
         Ok(Self {
             simulator,
             design_info,
-            clock: Some(clock),
-            reset: Some(reset),
+            clocks,
+            resets,
         })
     }
 
-    pub fn input_ports(&self) -> impl Iterator<Item = &VerylPortInfo> {
-        self.design_info.ports.iter().filter(|port| port.direction == PortDirection::Input)
+    pub fn data_input_ports(&self) -> impl Iterator<Item = &VerylPortInfo> {
+        // Ta bork clock och reset?
+        self.design_info.ports.iter().filter(|port| port.direction == Direction::Input && !port.type_kind.is_clock() && !port.type_kind.is_reset())
     }
 
     pub fn output_ports(&self) -> impl Iterator<Item = &VerylPortInfo> {
-        self.design_info.ports.iter().filter(|port| port.direction == PortDirection::Output)
+        self.design_info.ports.iter().filter(|port| port.direction == Direction::Output && !port.type_kind.is_clock() && !port.type_kind.is_reset())
     }
     
     pub fn set_input(
@@ -58,8 +64,12 @@ impl VerylBridge {
     ) -> Result<(), String> {
         let port_info= self.port_info(port)?;
 
-        if port_info.direction != PortDirection::Input{
+        if port_info.direction != Direction::Input{
             return Err(format!("Cannot write to port: '{port}': port is {:?}", port_info.direction));
+        }
+
+        if port_info.type_kind.is_clock() || port_info.type_kind.is_reset(){
+            return Err(format!("Cannot write clock/reset port '{port}' as a data input"));
         }
         let value = convert_syncrim_to_veryl(
             value, 
@@ -74,35 +84,50 @@ impl VerylBridge {
         self.design_info.ports.iter().find(|p| p.name == port).ok_or_else(|| format!("Veryl port '{port}' was not found"))
     }
 
-    pub fn port_type(
-        &self,
-        port: &str,
-    )-> Result<PortType, String>{
-        Ok(self.port_info(port)?.port_type)
-    }
 
-    pub fn port_direction(
-        &self,
-        port: &str,
-    )-> Result<PortDirection, String>{
-        Ok(self.port_info(port)?.direction)
-    }
-
-    pub fn clock(&mut self) -> Result<(), String> {
-        let clock = self.clock.as_ref().ok_or("VerylBridge has no clock")?;
+    pub fn clock(&mut self, name: &str) -> Result<(), String> {
+        let clock = self.clocks.get(name).ok_or_else(|| {
+            format!("VerylBridge has no clock named: '{name}'")
+        })?;
         self.simulator.step(clock);
 
         Ok(())
     }
 
-    pub fn has_clock(&self) -> bool {
-        self.clock.is_some()
+    pub fn clock_default(&mut self) -> Result<(), String> {
+        match self.clock_count(){
+            0 => {
+                return Err("VerylBridge has no clock".into());
+            }
+            1 => {
+                let name = self.clocks.keys().next().unwrap().clone();
+                self.clock(&name)
+            }
+            n => {
+                return Err(format!("VBerylBridge has multiple clocks: fond {n}"));
+            }
+        }
     }
 
-    pub fn reset(&mut self) -> Result<(), String>{
-        let clock = self.clock.as_ref().ok_or("VerylBridge has no clock")?;
-        let reset = self.reset.as_ref().ok_or("VerylBridge has no reset")?;
+    pub fn clock_count(&self) -> usize{
+        self.clocks.len()
+    }
+
+    pub fn reset(
+        &mut self,
+        reset_name: &str,
+        clock_name: &str,
+    ) -> Result<(), String>{
+        let reset_info = self.port_info(reset_name)?.clone();
+
+        if reset_info.type_kind != TypeKind::Reset {
+            return Err(format!("Only TypeKind::Reset is supported, not '{:?}'", reset_info.type_kind));
+        }
+        let reset = self.resets.get(reset_name).ok_or_else(|| format!("VerylBridge has no reset: '{reset_name}'"))?;
+
+        let clock = self.clocks.get(clock_name).ok_or_else(|| { format!("VerylBridge has no clock '{clock_name}'")})?;
         self.simulator.step_reset(clock, reset);
+
         Ok(())
     }
 
@@ -112,7 +137,7 @@ impl VerylBridge {
     ) -> Result<Value, String> {
         let port_info = self.port_info(port)?;
 
-        if port_info.direction != PortDirection::Output{
+        if port_info.direction != Direction::Output{
             return Err(format!("Cannot read Veryl output '{port}': port is {:?}", port_info.direction));
         }
         self.simulator.get(port).ok_or_else(|| format!("Could not read Veryl port '{port}'"))
@@ -134,7 +159,7 @@ use veryl_simulator::{ir::Value};
 
 
 
-    use crate::{PortDirection, PortType, veryl_bridge::VerylBridge};
+    use crate::{ PortType, veryl_bridge::VerylBridge};
 
     use crate::veryl_loader::load_veryl_simulator;
 
@@ -145,21 +170,27 @@ use veryl_simulator::{ir::Value};
     }
     #[test]
     fn get_ir_info(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_two_comb.veryl");
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_multiple_clock.veryl");
 
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestTwoComb").unwrap();
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "MultipleClock").unwrap();
 
-        let bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info);
+        let bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
         
-        // for port in bridge.input_ports() {
-        //     println!("Veryl input: {:?}", port)
-        // };
+        for port in bridge.data_input_ports() {
+            println!("Name: {}", port.name);
+            println!("Kind: {:?}", port.type_kind);
+
+            if port.type_kind.is_clock() {
+                println!("Has clock");
+            }
+            if port.type_kind.is_reset(){
+                println!("Has reset");
+            }
+        };
         // for port in bridge.output_ports() {
         //     println!("Veryl output: {:?}", port)
         // };
 
-        let info = bridge.port_info("a1").unwrap();
-        println!("Port a1: {:?}", info);
         
     }
     #[test]
@@ -168,9 +199,8 @@ use veryl_simulator::{ir::Value};
 
         let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestCombSeq").unwrap();
 
-        let mut bridge = VerylBridge::with_clock_reset(veryl_design.simulator, veryl_design.design_info , "clk", "rst").unwrap();
+        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info ).unwrap();
 
-        bridge.reset().unwrap();
 
         let y = bridge.read_value("y").unwrap();
 
@@ -192,7 +222,7 @@ use veryl_simulator::{ir::Value};
 
         bridge.set_input("a", signal.get_value(), port_type).unwrap();
 
-        bridge.clock().unwrap();
+        bridge.clock("clk").unwrap();
         let y = bridge.read_value("y").unwrap();
         match y {
             Value::U64(v) => {
@@ -223,7 +253,7 @@ use veryl_simulator::{ir::Value};
         };
 
 
-        bridge.clock().unwrap();
+        bridge.clock("clk").unwrap();
         let y = bridge.read_value("y").unwrap();
         match y {
             Value::U64(v) => {
@@ -242,7 +272,7 @@ use veryl_simulator::{ir::Value};
         let file = fixture("test_bridge.veryl");
         let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestBridge").unwrap();
 
-        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info);
+        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
 
         let signal = SignalValue::Data(10);
 

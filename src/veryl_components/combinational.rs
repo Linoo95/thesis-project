@@ -103,7 +103,7 @@ mod tests {
                 VerylBridge::new(
                     veryl_design.simulator,
                     veryl_design.design_info,
-                )
+                ).unwrap()
             )
         );
         let veryl_input = Rc::new(

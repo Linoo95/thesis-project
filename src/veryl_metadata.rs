@@ -3,7 +3,7 @@ use std::{str::FromStr};
 use veryl_simulator::Simulator;
 
 use veryl_analyzer::{
-    ir::VarPath, symbol::{Direction, SymbolKind}, symbol_table,
+    ir::{VarKind::Output, VarPath}, symbol::{Direction, SymbolKind, TypeKind}, symbol_table,
 };
 
 use crate::PortType;
@@ -12,14 +12,8 @@ use crate::PortType;
 pub struct VerylPortInfo {
     pub name: String,
     pub port_type: PortType,
-    pub direction: PortDirection,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum PortDirection {
-    Input,
-    Output,
-    Inout,
+    pub direction: Direction,
+    pub type_kind: TypeKind,
 }
 
 #[derive(Debug, Clone)]
@@ -53,24 +47,25 @@ pub fn extract_design_info(
         let name = format!("{}", port.name());
         let property = port.property();
 
-        let direction = match property.direction {
-            Direction::Input => PortDirection::Input,
-            Direction::Output => PortDirection::Output,
-            Direction::Inout => PortDirection::Inout,
-
-            other => {
-                return Err(format!("Unsupported direction {:?} for port '{}'", other, name));
+        let direction= match property.direction {
+            Direction::Input => Direction::Input,
+            Direction::Output => Direction::Output,
+            _=> {
+                return Err(format!("Direction not currently supported: {:?}", property.direction));
             }
         };
+        
         let port_type = port_type_from_ir(
             simulator,
             &name,
         )?;
 
+        let type_kind = property.r#type.kind.clone();
         ports.push(VerylPortInfo {
             name,
             port_type,
             direction,
+            type_kind,
         })
     }
     Ok(VerylDesignInfo { ports })
@@ -88,7 +83,7 @@ fn port_type_from_ir(
 
     let width = u8::try_from(variable.width).map_err(|_| {format!("Port '{}' has unsupported width {}", port, variable.width)})?;
 
-    if width <= 0 || width > 32 {
+    if width == 0 || width > 32 {
         return Err(format!("Port: {} has unsupported width: {}", port, width));
     }
     Ok(PortType { width, signed: variable.r#type.signed })
