@@ -3,7 +3,7 @@ use std::{str::FromStr};
 use veryl_simulator::Simulator;
 
 use veryl_analyzer::{
-    ir::{VarKind::Output, VarPath}, symbol::{Direction, SymbolKind, TypeKind}, symbol_table,
+    ir::{VarPath}, symbol::{Direction, SymbolKind, TypeKind}, symbol_table,
 };
 
 use crate::PortType;

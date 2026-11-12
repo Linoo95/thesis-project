@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{collections::HashMap};
 
 use syncrim::signal::{SignalValue};
 
@@ -7,7 +7,7 @@ use veryl_simulator::{Simulator, ir::{Event, Value}};
 
 use crate::{PortType, VerylDesignInfo, VerylPortInfo, convert_syncrim_to_veryl};
 
-pub type SharedVerylBridge = Rc<RefCell<VerylBridge>>;
+//pub type SharedVerylBridge = Rc<RefCell<VerylBridge>>;
 
 pub struct VerylBridge {
     simulator: Simulator,

@@ -15,7 +15,7 @@ use syncrim::{
 
 
 
-pub const VERYL_A_OUT_ID: &str = "a";
+pub const VERYL_INPUT_OUT_ID: &str = "a";
 
 #[derive(Serialize, Deserialize)]
 pub struct VerylInputComponent {
@@ -42,7 +42,7 @@ impl Component for VerylInputComponent {
                 vec![],
                 OutputType::Combinatorial,
                 vec![
-                    VERYL_A_OUT_ID
+                    VERYL_INPUT_OUT_ID
                 ],
             )
         )

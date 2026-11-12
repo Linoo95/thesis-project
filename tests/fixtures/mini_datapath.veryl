@@ -1,0 +1,34 @@
+module MiniDatapath (
+    clk: input clock,
+    rst: input reset,
+
+    a: input logic<8>,
+    b: input logic<8>,
+    op: input logic<2>,
+    enable: input logic,
+
+    result: output logic<8>,
+){
+    var alu_result: logic<8>;
+    var result_reg: logic<8>;
+
+    always_comb{
+        case op {
+            0: alu_result = a + b;
+            1: alu_result = a - b;
+            2: alu_result = a & b;
+            3: alu_result = a | b;
+            default: alu_result = 0;
+        }
+    }
+
+    always_ff(clk, rst) {
+        if_reset{
+            result_reg = 0;
+        } else if enable {
+            result_reg = alu_result;
+        }
+    }
+
+    assign result = result_reg;
+}
