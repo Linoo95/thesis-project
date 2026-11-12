@@ -104,13 +104,31 @@ impl VerylBridge {
                 self.clock(&name)
             }
             n => {
-                return Err(format!("VBerylBridge has multiple clocks: fond {n}"));
+                return Err(format!("VerylBridge has multiple clocks: found {n}"));
             }
         }
     }
 
     pub fn clock_count(&self) -> usize{
         self.clocks.len()
+    }
+    pub fn reset_default(&mut self) -> Result<(), String> {
+
+        if self.resets.len() == 0 {
+            return Ok(())
+        };
+        if self.resets.len() > 1 {
+            return Err(format!("VerylBridge has multiple resets: found {}", self.resets.len()));
+        }
+        if self.clocks.len() == 0{
+            return Err("VerylBridge has no clock".into());
+        }
+        if self.clocks.len() > 1 {
+            return Err(format!("VerylBridge has multiple clocks"));
+        }
+        let reset_name = self.resets.keys().next().unwrap().clone();
+        let clock_name = self.clocks.keys().next().unwrap().clone();
+        self.reset(&reset_name, &clock_name)
     }
 
     pub fn reset(
@@ -163,14 +181,92 @@ use veryl_simulator::{ir::Value};
 
     use crate::veryl_loader::load_veryl_simulator;
 
-
-
     fn fixture(name: &str) -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(name)
     }
+        #[test]
+    fn unsupported_reset_kind_are_rejected(){
+        let file = fixture("unsupported_reset.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "UnsupportedReset").unwrap();
+
+        let bridge = VerylBridge::new(
+            veryl_design.simulator,
+            veryl_design.design_info
+        );
+
+        assert!(bridge.is_err());
+         
+        
+    }
+    #[test]
+    fn inout_port_is_rejected(){
+        let file = fixture("in_out_port.veryl");
+        assert!(load_veryl_simulator(file.to_str().unwrap(), "InOutPort").is_err());
+    }
+    #[test]
+    fn writing_to_veryl_output_fails(){
+        let file = fixture("test_bridge_register.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
+
+        let mut bridge = VerylBridge::new(
+            veryl_design.simulator,
+            veryl_design.design_info
+        ).unwrap();
+        
+        assert!(bridge.set_input("y", SignalValue::Data(10), PortType{width: 8, signed: false}).is_err())
+    }
+    #[test]
+    fn reading_veryl_input_fails(){
+        let file = fixture("test_bridge_register.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
+
+        let mut bridge = VerylBridge::new(
+            veryl_design.simulator,
+            veryl_design.design_info
+        ).unwrap();
+        // "d" = input port
+        assert!(bridge.read_value("d").is_err())
+    }
+    #[test]
+    fn veryl_register_can_be_reset(){
+        let file = fixture("test_bridge_register.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
+
+        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
+
+        bridge.set_input("d", SignalValue::Data(10), PortType { width: 8, signed: false }).unwrap();
+
+        bridge.clock_default().unwrap();
+
+        let value = bridge.read_value("y").unwrap();
+        match value {
+            Value::U64(v) => {
+                assert_eq!(v.payload, 10)
+            }
+            _ => {
+                panic!("Unsupported!")
+            }
+        };
+        bridge.reset("rst", "clk").unwrap();
+
+        let value = bridge.read_value("y").unwrap();
+        match value {
+            Value::U64(v) => {
+                assert_eq!(v.payload, 0)
+            }
+            _ => {
+                panic!("Unsupported!")
+            }
+        };
+
+    }
     #[test]
     fn get_ir_info(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_multiple_clock.veryl");
+        let file = fixture("test_bridge_multiple_clock.veryl");
 
         let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "MultipleClock").unwrap();
 

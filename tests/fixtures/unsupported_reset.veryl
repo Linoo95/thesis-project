@@ -1,0 +1,18 @@
+module UnsupportedReset(
+    clk: input clock,
+    rst: input reset_async_high,
+    a: input logic<8>,
+    y: output logic<8>,
+){
+
+    var q: logic<8>;
+
+    always_ff(clk, rst){
+        if_reset{
+            q = 0;
+        }else{
+            q = a;
+        }
+    }
+    assign y = q;
+}

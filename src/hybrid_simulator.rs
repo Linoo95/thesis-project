@@ -211,6 +211,17 @@ impl HybridSimulator {
         self.veryl.borrow_mut().set_input(port, value, source_type)
     }
 
+    pub fn reset(&mut self) -> Result<(), String>{
+        self.syncrim.reset();
+        {
+            let mut bridge = self.veryl.borrow_mut();
+            bridge.reset_default()?;
+        }
+        self.settle_combinational()?;
+
+        Ok(())
+    }
+
 }
 
 
@@ -225,8 +236,8 @@ mod tests {
             SignalValue,
             Simulator,
         }, components::{
-            ADD_OUT_ID, CONSTANT_OUT_ID, Constant, REGISTER_OUT_ID, Register, Add,
-        },
+            ADD_OUT_ID, Add, CONSTANT_OUT_ID, Constant, REGISTER_OUT_ID, Register,
+        }, simulator,
     };
 
     use crate::{
@@ -234,6 +245,254 @@ mod tests {
             VERYL_Y_OUT_ID, VerylCombinationalComponent, 
         }, hybrid_simulator::{HybridSimulator, SyncRimToVerylMapping, VerylToSyncRimMapping},  veryl_bridge::VerylBridge, veryl_loader::load_veryl_simulator,
     };
+    #[test]
+    fn hybrid_run_with_no_clock_no_reset_on_veryl_component(){
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestBridge").unwrap();
+
+        let bridge = Rc::new(
+            RefCell::new(
+                VerylBridge::new(
+                    veryl_design.simulator,
+                    veryl_design.design_info,
+                ).unwrap()
+            )
+        );
+        let signal_value = SignalValue::Data(10);
+        let constant = Rc::new(
+            Constant::new(
+                "constant", 
+                (0.0, 0.0), 
+                signal_value,
+            )
+        );
+        let add = Rc::new(
+            Add::new(
+                "add", (0.0, 0.0), 
+                Input::new(
+                    "veryl_component", 
+                    VERYL_Y_OUT_ID,
+                ), 
+                Input::new(
+                    "constant", 
+                    CONSTANT_OUT_ID,
+                )
+            )
+        );
+        let input = Rc::new(
+            VerylInputComponent::new(
+                "input",
+            )
+        );
+
+        let veryl_component = Rc::new(
+            VerylCombinationalComponent::new(
+                "veryl_component", 
+                Input::new(
+                    "input", 
+                    VERYL_A_OUT_ID,
+                )
+            )
+        );
+
+        let store = ComponentStore{
+            store: vec![
+                constant,
+                veryl_component,
+                add,
+                input,
+            ]
+        };
+        
+        let veryl_to_syncrim = vec![
+            VerylToSyncRimMapping{
+                veryl_port: "y".into(),
+                syncrim_component: "veryl_component".into(),
+                syncrim_output: VERYL_Y_OUT_ID.into(),
+                destination_type: PortType { width: 8, signed: false }
+            }
+        ];
+
+        let syncrim_to_veryl = vec![];
+
+
+        let simulator = Simulator::new(store).unwrap();
+
+        let mut hybrid = HybridSimulator::new(simulator, bridge, veryl_to_syncrim, syncrim_to_veryl);
+        
+        hybrid.set_veryl_input("a", SignalValue::Data(5), PortType { width: 8, signed: false }).unwrap();
+        hybrid.initialize_state().unwrap();
+        println!("Add out: {:?}",hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value());
+        println!("Veryl comb out: {:?}", hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value());
+
+        hybrid.clock().unwrap();
+        
+        println!("Add out: {:?}",hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value());
+        println!("Veryl comb out: {:?}", hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value());
+
+        hybrid.reset().unwrap();
+
+        println!("Add out: {:?}",hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value());
+        println!("Veryl comb out: {:?}", hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value());
+    }
+    #[test]
+    fn hybrid_reset_restores_consistent_state(){
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_register.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
+
+        let bridge = Rc::new(
+            RefCell::new(
+                VerylBridge::new(
+                    veryl_design.simulator,
+                    veryl_design.design_info,
+                ).unwrap()
+            )
+        );
+
+        let signal_value = SignalValue::Data(10);
+        let constant = Rc::new(
+            Constant::new(
+                "constant", 
+                (0.0, 0.0), 
+                signal_value,
+            )
+        );
+        let add = Rc::new(
+            Add::new(
+                "add", (0.0, 0.0), 
+                Input::new(
+                    "register", 
+                    VERYL_Y_OUT_ID,
+                ), 
+                Input::new(
+                    "constant", 
+                    CONSTANT_OUT_ID,
+                )
+            )
+        );
+        let input = Rc::new(
+            VerylInputComponent::new(
+                "input",
+            )
+        );
+
+        let register = Rc::new(
+            VerylRegisterComponent::new(
+                "register", 
+                Input::new(
+                    "input", 
+                    VERYL_A_OUT_ID,
+                )
+            )
+        );
+
+        let store = ComponentStore{
+            store: vec![
+                constant,
+                register,
+                add,
+                input,
+            ]
+        };
+        
+        let veryl_to_syncrim = vec![
+            VerylToSyncRimMapping{
+                veryl_port: "y".into(),
+                syncrim_component: "register".into(),
+                syncrim_output: VERYL_Y_OUT_ID.into(),
+                destination_type: PortType { width: 8, signed: false }
+            }
+        ];
+
+        let syncrim_to_veryl = vec![];
+
+
+        let simulator = Simulator::new(store).unwrap();
+
+        let mut hybrid = HybridSimulator::new(simulator, bridge, veryl_to_syncrim, syncrim_to_veryl);
+        
+        hybrid.set_veryl_input("d", SignalValue::Data(5), PortType { width: 8, signed: false }).unwrap();
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value(), SignalValue::Data(10));
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("register", VERYL_Y_OUT_ID)).get_value(), SignalValue::Data(0));
+        hybrid.clock().unwrap();
+
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value(), SignalValue::Data(15));
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("register", VERYL_Y_OUT_ID)).get_value(), SignalValue::Data(5));
+        hybrid.reset().unwrap();
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value(), SignalValue::Data(10));
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("register", VERYL_Y_OUT_ID)).get_value(), SignalValue::Data(0));
+
+        hybrid.set_veryl_input("d", SignalValue::Data(10), PortType { width: 8, signed: false }).unwrap();
+        hybrid.clock().unwrap();
+        
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("add", ADD_OUT_ID)).get_value(), SignalValue::Data(20));
+        assert_eq!(hybrid.syncrim.get_input_signal(&Input::new("register", VERYL_Y_OUT_ID)).get_value(), SignalValue::Data(10));
+
+    }
+    #[test]
+    fn multiple_veryl_clocks_fails(){
+        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_multiple_clock.veryl");
+
+        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "MultipleClock").unwrap();
+
+        let bridge = Rc::new(
+            RefCell::new(
+                VerylBridge::new(
+                    veryl_design.simulator,
+                    veryl_design.design_info,
+                ).unwrap()
+            )
+        );
+        let signal_value = SignalValue::Data(10);
+        let constant = Rc::new(
+            Constant::new(
+                "constant", 
+                (0.0, 0.0), 
+                signal_value,
+            )
+        );
+
+        let register = Rc::new(
+            VerylRegisterComponent::new(
+                "register", 
+                Input::new(
+                    "constant", 
+                    CONSTANT_OUT_ID,
+                )
+            )
+        );
+
+        let store = ComponentStore{
+            store: vec![
+                constant,
+                register,
+            ]
+        };
+        
+        let veryl_to_syncrim = vec![];
+
+        let syncrim_to_veryl = vec![
+            SyncRimToVerylMapping{
+                syncrim_component: "constant".into(),
+                syncrim_output: CONSTANT_OUT_ID.into(),
+                source_type: PortType{
+                    width: 8,
+                    signed: false,
+                },
+                veryl_port: "a".into()
+            }
+        ];
+
+
+        let simulator = Simulator::new(store).unwrap();
+
+        let mut hybrid = HybridSimulator::new(simulator, bridge, veryl_to_syncrim, syncrim_to_veryl);
+
+        assert!(hybrid.clock().is_err());
+    }
+
 
     #[test]
     fn hybrid_comb_chain_requires_multiple_settle_iterations(){

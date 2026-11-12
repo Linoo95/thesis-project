@@ -1,0 +1,4 @@
+module InOutPort(
+    a: inout tri logic<8>,
+){
+}
