@@ -81,8 +81,6 @@ impl HybridSimulator {
     }
 
     fn clock_veryl_sequential(&mut self) -> Result<(), String> { 
-        //let mut bridge = self.veryl.borrow_mut();
-        
         match self.veryl.clock_count() {
             // if there is no clock
             0 => Ok(()),
@@ -91,20 +89,6 @@ impl HybridSimulator {
             n=> Err(format!("Multiple Veryl clocks are currently unsupported: found {n}")),
         }
     }
-
-    // fn clock_syncrim_sequential(&mut self) -> Result<(), String> {
-    //     for component in self.syncrim.ordered_components.clone() {
-    //         let (_, ports) = component.get_id_ports();
-    //         if ports.out_type == OutputType::Sequential {
-    //             component
-    //                 .clock(&mut self.syncrim)
-    //                 .map_err(|condition| {
-    //                     format!("Syncrim sequential component {} failed: {:?}", component.get_id_ports().0, condition)
-    //                 })?;
-    //         }
-    //     }
-    //     Ok(())
-    // }
 
     fn settle_syncrim_combinational(&mut self) -> Result<(), String>{
         for component in self.syncrim.ordered_components.clone() {
@@ -147,8 +131,6 @@ impl HybridSimulator {
                     &mapping.syncrim_output,
                 )
             );
-            // let mut bridge = self.veryl.borrow_mut();
-            // bridge.set_input(&mapping.veryl_port, signal.get_value(), mapping.source_type)?;
             self.veryl.set_input(&mapping.veryl_port, signal.get_value(), mapping.source_type)?;
         }
         Ok(())
@@ -156,13 +138,7 @@ impl HybridSimulator {
 
     fn sync_veryl_to_syncrim(&mut self) -> Result<(), String> {
 
-        //let mut bridge = self.veryl.borrow_mut();
-
         for mapping in &self.veryl_to_syncrim {
-            // let source_type = bridge.port_info(&mapping.veryl_port)?.port_type;
-
-            // let value = bridge.read_value(&mapping.veryl_port)?;
-
             let source_type = self.veryl.port_info(&mapping.veryl_port)?.port_type;
 
             let value = self.veryl.read_value(&mapping.veryl_port)?;
@@ -190,13 +166,8 @@ impl HybridSimulator {
             );
             input_values.push(signal.get_value());
         }
-        //let mut bridge = self.veryl.borrow_mut();
 
         for mapping in &self.veryl_to_syncrim {
-            // let source_type = bridge.port_info(&mapping.veryl_port)?.port_type;
-            
-            // let value = bridge.read_value(&mapping.veryl_port)?;
-
             let source_type = self.veryl.port_info(&mapping.veryl_port)?.port_type;
             
             let value = self.veryl.read_value(&mapping.veryl_port)?;
@@ -214,16 +185,11 @@ impl HybridSimulator {
         value: SignalValue,
         source_type: PortType,
     ) -> Result<(), String> {
-        //self.veryl.borrow_mut().set_input(port, value, source_type)
         self.veryl.set_input(port, value, source_type)
     }
 
     pub fn reset(&mut self) -> Result<(), String>{
         self.syncrim.reset();
-        // {
-        //     let mut bridge = self.veryl.borrow_mut();
-        //     bridge.reset_default()?;
-        // }
         self.veryl.reset_default()?;
         self.settle_combinational()?;
 
@@ -251,7 +217,7 @@ mod tests {
     use crate::{
         PortType, VERYL_INPUT_OUT_ID, VerylInputComponent, VerylRegisterComponent, combinational::{
             VERYL_Y_OUT_ID, VerylCombinationalComponent, 
-        }, hybrid_simulator::{HybridSimulator, SyncRimToVerylMapping, VerylToSyncRimMapping},  veryl_bridge::VerylBridge, veryl_loader::load_veryl_simulator,
+        }, hybrid_simulator::{HybridSimulator, SyncRimToVerylMapping, VerylToSyncRimMapping}, load_veryl_bridge, veryl_bridge::VerylBridge, veryl_loader::load_veryl_simulator,
     };
     #[test]
     fn hybrid_run_with_no_clock_no_reset_on_veryl_component(){
@@ -495,14 +461,8 @@ mod tests {
 
     #[test]
     fn hybrid_comb_chain_requires_multiple_settle_iterations(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_two_comb.veryl");
 
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestTwoComb").unwrap();
-
-        let shared_bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info
-        ).unwrap();
+        let shared_bridge = load_veryl_bridge("test_bridge_two_comb.veryl", "TestTwoComb").unwrap();
 
 
 
@@ -525,23 +485,20 @@ mod tests {
                 )
             )          
         );
-        let signal_a = SignalValue::Data(5);
-        
 
         let constant_a = Rc::new(
             Constant::new(
                 "constant_a",
                 (1.0, 1.0), 
-                signal_a
+                SignalValue::Data(5),
             )
         );
-        let signal_b = SignalValue::Data(5);
-        
+
         let constant_b = Rc::new(
             Constant::new(
                 "constant_b",
                 (1.0, 1.0), 
-                signal_b
+                SignalValue::Data(5),
             )
         );
 
@@ -560,13 +517,11 @@ mod tests {
             )
         );
 
-        let signal_c = SignalValue::Data(4);
-
         let constant_c = Rc::new(
             Constant::new(
                 "constant_c",
                 (1.0, 1.0), 
-                signal_c
+                SignalValue::Data(4),
             )
         );
     
@@ -585,13 +540,11 @@ mod tests {
             )
         );
 
-        let signal_d = SignalValue::Data(5);
-
         let constant_d = Rc::new(
             Constant::new(
                 "constant_d",
                 (0.0, 0.0),
-                signal_d,
+                SignalValue::Data(5),
             )
         );
 
@@ -619,12 +572,11 @@ mod tests {
             )
         );
 
-        let signal_e = SignalValue::Data(5);
         let constant_e = Rc::new(
             Constant::new(
                 "constant_e", 
                 (0.0, 0.0), 
-                signal_e,
+                SignalValue::Data(5),
             )
         );
 
@@ -766,23 +718,13 @@ mod tests {
     
     #[test]
     fn hybrid_sequential_pipeline_preserves_clock_boundaries(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_register.veryl");
+        let shared_bridge = load_veryl_bridge("test_bridge_register.veryl", "TestRegister").unwrap();
 
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
-
-        let shared_bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info,
-        ).unwrap();
-
-
-        let constant_reg = SignalValue::Data(10);
-        
         let constant_register = Rc::new(
             Constant::new(
                 "constant_register", 
                 (0.0, 0.0), 
-                constant_reg,
+                SignalValue::Data(10),
             )
         );
 
@@ -797,13 +739,11 @@ mod tests {
             )
         );
 
-        let const_a = SignalValue::Data(0);
-
         let constant_1 = Rc::new(
             Constant::new(
                 "constant_1", 
                 (0.0, 0.0), 
-                const_a,    
+                SignalValue::Data(0),    
             )
         );
 
@@ -834,13 +774,11 @@ mod tests {
             )
         );
 
-        let constant_add_2 = SignalValue::Data(0);
-
         let constant_add_2 = Rc::new(
             Constant::new(
                 "constant_add_2", 
                 (0.0, 0.0), 
-                constant_add_2,
+                SignalValue::Data(0),
             )
         );
 
@@ -1009,32 +947,21 @@ mod tests {
     }
     #[test]
     fn syncrim_comb_to_veryl_seq(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_register.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
-
-        let shared_bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info,
-        ).unwrap();
-
-        let input_1 = SignalValue::Data(5);
+        let shared_bridge = load_veryl_bridge("test_bridge_register.veryl", "TestRegister").unwrap();
 
         let constant_a = Rc::new(
             Constant::new(
                 "constant_a", 
                 (1.0, 1.0),
-                input_1,
+                SignalValue::Data(5),
             )
         );
-
-        let input_2 = SignalValue::Data(5);
 
         let constant_b = Rc::new(
             Constant::new(
                 "constant_b", 
                 (1.0, 1.0),
-                input_2,
+                SignalValue::Data(5),
             )
         );
 

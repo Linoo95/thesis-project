@@ -1,13 +1,11 @@
-use std::{collections::HashMap};
+use std::{collections::HashMap, path::PathBuf};
 
 use syncrim::signal::{SignalValue};
 
 use veryl_analyzer::symbol::{Direction, TypeKind};
 use veryl_simulator::{Simulator, ir::{Event, Value}};
 
-use crate::{PortType, VerylDesignInfo, VerylPortInfo, convert_syncrim_to_veryl};
-
-//pub type SharedVerylBridge = Rc<RefCell<VerylBridge>>;
+use crate::{PortType, VerylDesignInfo, VerylPortInfo, convert_syncrim_to_veryl, load_veryl_simulator};
 
 pub struct VerylBridge {
     simulator: Simulator,
@@ -48,7 +46,6 @@ impl VerylBridge {
     }
 
     pub fn data_input_ports(&self) -> impl Iterator<Item = &VerylPortInfo> {
-        // Ta bork clock och reset?
         self.design_info.ports.iter().filter(|port| port.direction == Direction::Input && !port.type_kind.is_clock() && !port.type_kind.is_reset())
     }
 
@@ -164,7 +161,11 @@ impl VerylBridge {
 }
 
 
-
+pub fn load_veryl_bridge(file_name: &str, top_module: &str) -> Result<VerylBridge, String> {
+    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join(file_name);
+    let veryl_design = load_veryl_simulator(file.to_str().unwrap(), top_module).unwrap();
+    Ok(VerylBridge::new(veryl_design.simulator, veryl_design.design_info)?)
+}
 
 
 
@@ -172,12 +173,10 @@ impl VerylBridge {
 mod tests {
     use std::path::PathBuf;
 
-    use syncrim::{signal::{ Signal, SignalValue}};
+    use syncrim::{signal::{SignalValue}};
 use veryl_simulator::{ir::Value};
 
-
-
-    use crate::{ PortType, veryl_bridge::VerylBridge};
+    use crate::{ PortType, load_veryl_bridge, veryl_bridge::VerylBridge};
 
     use crate::veryl_loader::load_veryl_simulator;
 
@@ -206,37 +205,19 @@ use veryl_simulator::{ir::Value};
     }
     #[test]
     fn writing_to_veryl_output_fails(){
-        let file = fixture("test_bridge_register.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
-
-        let mut bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info
-        ).unwrap();
+        let mut bridge = load_veryl_bridge("test_bridge_register.veryl", "TestRegister").unwrap();
         
         assert!(bridge.set_input("y", SignalValue::Data(10), PortType{width: 8, signed: false}).is_err())
     }
     #[test]
     fn reading_veryl_input_fails(){
-        let file = fixture("test_bridge_register.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
-
-        let mut bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info
-        ).unwrap();
+        let mut bridge = load_veryl_bridge("test_bridge_register.veryl", "TestRegister").unwrap();
         // "d" = input port
         assert!(bridge.read_value("d").is_err())
     }
     #[test]
     fn veryl_register_can_be_reset(){
-        let file = fixture("test_bridge_register.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
-
-        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
+        let mut bridge = load_veryl_bridge("test_bridge_register.veryl", "TestRegister").unwrap();
 
         bridge.set_input("d", SignalValue::Data(10), PortType { width: 8, signed: false }).unwrap();
 
@@ -265,41 +246,9 @@ use veryl_simulator::{ir::Value};
 
     }
     #[test]
-    fn get_ir_info(){
-        let file = fixture("test_bridge_multiple_clock.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "MultipleClock").unwrap();
-
-        let bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
-        
-        for port in bridge.data_input_ports() {
-            println!("Name: {}", port.name);
-            println!("Kind: {:?}", port.type_kind);
-
-            if port.type_kind.is_clock() {
-                println!("Has clock");
-            }
-            if port.type_kind.is_reset(){
-                println!("Has reset");
-            }
-        };
-        // for port in bridge.output_ports() {
-        //     println!("Veryl output: {:?}", port)
-        // };
-
-        
-    }
-    #[test]
     fn veryl_comb_to_seq(){
-        let file = fixture("test_bridge_comb_seq.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestCombSeq").unwrap();
-
-        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info ).unwrap();
-
-
+        let mut bridge = load_veryl_bridge("test_bridge_comb_seq.veryl", "TestCombSeq").unwrap();
         let y = bridge.read_value("y").unwrap();
-
         match y {
             Value::U64(v) => {
                 assert_eq!(v.payload, 0);
@@ -309,14 +258,7 @@ use veryl_simulator::{ir::Value};
             }
         };
 
-        let signal: Signal = 10.into();
-
-        let port_type = PortType {
-            width: 8,
-            signed: false,
-        };
-
-        bridge.set_input("a", signal.get_value(), port_type).unwrap();
+        bridge.set_input("a", SignalValue::Data(10), PortType { width: 8, signed: false }).unwrap();
 
         bridge.clock("clk").unwrap();
         let y = bridge.read_value("y").unwrap();
@@ -329,14 +271,7 @@ use veryl_simulator::{ir::Value};
             }
         };
 
-        let signal_2: Signal = 5.into();
-
-        let port_type_2 = PortType {
-            width: 8,
-            signed: false,
-        };
-
-        bridge.set_input("a", signal_2.get_value(), port_type_2).unwrap();
+        bridge.set_input("a", SignalValue::Data(5), PortType { width: 8, signed: false }).unwrap();
 
         let y = bridge.read_value("y").unwrap();
         match y {
@@ -365,19 +300,9 @@ use veryl_simulator::{ir::Value};
     #[test]
     fn syncrim_unsigned_signal_can_drive_veryl_input(){
 
-        let file = fixture("test_bridge.veryl");
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestBridge").unwrap();
+        let mut bridge = load_veryl_bridge("test_bridge.veryl", "TestBridge").unwrap();
 
-        let mut bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
-
-        let signal = SignalValue::Data(10);
-
-        let port_type = PortType {
-            width: 8,
-            signed: false,
-        };
-
-        bridge.set_input("a", signal, port_type).unwrap();
+        bridge.set_input("a", SignalValue::Data(10), PortType { width: 8, signed: false }).unwrap();
 
         let output = bridge.read_value("y").unwrap();
 
