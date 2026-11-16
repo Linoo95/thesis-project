@@ -215,21 +215,13 @@ mod tests {
     };
 
     use crate::{
-        PortType, VERYL_INPUT_OUT_ID, VerylInputComponent, VerylRegisterComponent, combinational::{
+        PortType, VERYL_INPUT_OUT_ID, VerylInputComponent, VerylSequentialComponent, combinational::{
             VERYL_Y_OUT_ID, VerylCombinationalComponent, 
         }, hybrid_simulator::{HybridSimulator, SyncRimToVerylMapping, VerylToSyncRimMapping}, load_veryl_bridge, veryl_bridge::VerylBridge, veryl_loader::load_veryl_simulator,
     };
     #[test]
     fn hybrid_run_with_no_clock_no_reset_on_veryl_component(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestBridge").unwrap();
-
-        let bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info,
-        ).unwrap();
-
+        let bridge = load_veryl_bridge("test_bridge.veryl", "TestBridge").unwrap();
         let signal_value = SignalValue::Data(10);
         let constant = Rc::new(
             Constant::new(
@@ -309,14 +301,7 @@ mod tests {
     }
     #[test]
     fn hybrid_reset_restores_consistent_state(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_register.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "TestRegister").unwrap();
-
-        let bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info,
-        ).unwrap();
+        let bridge = load_veryl_bridge("test_bridge_register.veryl", "TestRegister").unwrap();
 
 
         let signal_value = SignalValue::Data(10);
@@ -347,7 +332,7 @@ mod tests {
         );
 
         let register = Rc::new(
-            VerylRegisterComponent::new(
+            VerylSequentialComponent::new(
                 "register", 
                 Input::new(
                     "input", 
@@ -401,14 +386,7 @@ mod tests {
     }
     #[test]
     fn multiple_veryl_clocks_fails(){
-        let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("test_bridge_multiple_clock.veryl");
-
-        let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "MultipleClock").unwrap();
-
-        let bridge = VerylBridge::new(
-            veryl_design.simulator,
-            veryl_design.design_info,
-        ).unwrap();
+        let bridge = load_veryl_bridge("test_bridge_multiple_clock.veryl", "MultipleClock").unwrap();
 
         let signal_value = SignalValue::Data(10);
         let constant = Rc::new(
@@ -420,7 +398,7 @@ mod tests {
         );
 
         let register = Rc::new(
-            VerylRegisterComponent::new(
+            VerylSequentialComponent::new(
                 "register", 
                 Input::new(
                     "constant", 
@@ -461,11 +439,7 @@ mod tests {
 
     #[test]
     fn hybrid_comb_chain_requires_multiple_settle_iterations(){
-
         let shared_bridge = load_veryl_bridge("test_bridge_two_comb.veryl", "TestTwoComb").unwrap();
-
-
-
         let veryl_comb_1 = Rc::new(         
             VerylCombinationalComponent::new(
                 "veryl_comb_1", 
@@ -475,7 +449,6 @@ mod tests {
                 )
             )          
         );
-
         let veryl_comb_2 = Rc::new(         
             VerylCombinationalComponent::new(
                 "veryl_comb_2", 
@@ -485,7 +458,6 @@ mod tests {
                 )
             )          
         );
-
         let constant_a = Rc::new(
             Constant::new(
                 "constant_a",
@@ -501,7 +473,6 @@ mod tests {
                 SignalValue::Data(5),
             )
         );
-
         let first_add = Rc::new(
             Add::new(
                 "first_add", 
@@ -516,7 +487,6 @@ mod tests {
                 )
             )
         );
-
         let constant_c = Rc::new(
             Constant::new(
                 "constant_c",
@@ -524,7 +494,6 @@ mod tests {
                 SignalValue::Data(4),
             )
         );
-    
         let second_add = Rc::new(
             Add::new(
                 "second_add", 
@@ -539,7 +508,6 @@ mod tests {
                 )
             )
         );
-
         let constant_d = Rc::new(
             Constant::new(
                 "constant_d",
@@ -547,7 +515,6 @@ mod tests {
                 SignalValue::Data(5),
             )
         );
-
         let third_add = Rc::new(
             Add::new(
                 "third_add",
@@ -571,7 +538,6 @@ mod tests {
                 )
             )
         );
-
         let constant_e = Rc::new(
             Constant::new(
                 "constant_e", 
@@ -765,7 +731,7 @@ mod tests {
         );
 
         let veryl_register = Rc::new(
-            VerylRegisterComponent::new(
+            VerylSequentialComponent::new(
                 "veryl_register", 
                 Input::new(
                     "add_1",
@@ -975,7 +941,7 @@ mod tests {
         );
 
         let register_component = Rc::new(
-            VerylRegisterComponent::new(
+            VerylSequentialComponent::new(
                 "register_component", 
                 Input::new("add_component", ADD_OUT_ID),
             )

@@ -1,25 +1,19 @@
 use std::{path::PathBuf, rc::Rc};
 
-use hybrid_sim::{MiniDatapathComponent, PortType, RESULT_OUT_ID, VERYL_INPUT_OUT_ID, VerylBridge, VerylInputComponent, hybrid_simulator::{HybridSimulator, VerylToSyncRimMapping}, load_veryl_simulator};
+use hybrid_sim::{MiniDatapathComponent, PortType, RESULT_OUT_ID, VERYL_INPUT_OUT_ID, VerylBridge, VerylInputComponent, hybrid_simulator::{HybridSimulator, VerylToSyncRimMapping}, load_veryl_bridge, load_veryl_simulator};
 use syncrim::{common::{ComponentStore, Input, Simulator}, components::{ADD_OUT_ID, Add, CONSTANT_OUT_ID, Constant, REGISTER_OUT_ID, Register}, signal::SignalValue};
 
 
 
 #[test]
 fn mini_datapath_runs_hybrid_simulation(){
-    let file = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests").join("fixtures").join("mini_datapath.veryl");
-
-    let veryl_design = load_veryl_simulator(file.to_str().unwrap(), "MiniDatapath").unwrap();
-
-    let bridge = VerylBridge::new(veryl_design.simulator, veryl_design.design_info).unwrap();
-
-    let const_signal = SignalValue::Data(1);
+    let bridge = load_veryl_bridge("mini_datapath.veryl", "MiniDatapath").unwrap();
 
     let constant = Rc::new(
         Constant::new(
             "constant", 
             (0.0, 0.0), 
-            const_signal
+            SignalValue::Data(1),
         )
     );
 

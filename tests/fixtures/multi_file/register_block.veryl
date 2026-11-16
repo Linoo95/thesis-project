@@ -1,0 +1,19 @@
+module RegisterBlock(
+    clk: input clock,
+    rst: input reset,
+    enable: input logic,
+    d: input logic<8>,
+    q: output logic<8>,
+){
+    var value: logic<8>;
+
+    always_ff(clk, rst){
+        if_reset{
+            value = 0;
+        } else if enable {
+            value = d;
+        }
+    }
+
+    assign q = value;
+}

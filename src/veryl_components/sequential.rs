@@ -21,12 +21,12 @@ pub const VERYL_D_IN_ID: &str = "d";
 pub const VERYL_Y_OUT_ID: &str = "y";
 
 #[derive(Serialize, Deserialize)]
-pub struct VerylRegisterComponent {
+pub struct VerylSequentialComponent {
     pub id: String,
     pub d_in: Input,
 }
 
-impl VerylRegisterComponent {
+impl VerylSequentialComponent {
     pub fn new(
         id: &str,
         d_in: Input,
@@ -40,7 +40,7 @@ impl VerylRegisterComponent {
 }
 
 #[typetag::serde]
-impl Component for VerylRegisterComponent {
+impl Component for VerylSequentialComponent {
     fn get_id_ports(&self) -> (Id, Ports) {
         (
             self.id.clone(),

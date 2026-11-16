@@ -1,0 +1,15 @@
+module Alu (
+    a: input logic<8>,
+    b: input logic<8>,
+
+    op: input logic<2>,
+    y: output logic<8>,
+){
+    assign y = case op{
+        0: a + b,
+        1: a - b,
+        2: a & b,
+        3: a | b,
+        default: 0,
+    };
+}

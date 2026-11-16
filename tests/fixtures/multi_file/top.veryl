@@ -1,0 +1,36 @@
+pub module MultiFileTop(
+    clk: input clock,
+    rst: input reset,
+
+    a: input logic<8>,
+    b: input logic<8>,
+
+    op: input logic<2>,
+    enable: input logic,
+
+    alu_out: output logic<8>,
+    reg_out: output logic<8>,
+    result: output logic<8>,
+){
+    var alu_result: logic<8>;
+    var reg_result: logic<8>;
+
+    inst u_alu: Alu(
+        a,
+        b,
+        op,
+        y: alu_result,
+    );
+
+    inst u_reg: RegisterBlock(
+        clk,
+        rst,
+        enable,
+        d: alu_result,
+        q: reg_result,
+    );
+
+    assign alu_out = alu_result;
+    assign reg_out = reg_result;
+    assign result = reg_result;
+}
