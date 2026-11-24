@@ -7,7 +7,7 @@ use syncrim::{
 };
 
 
-use crate::{ PortType, VerylBridge, convert_veryl_to_syncrim};
+use crate::{ PortType, VerylBridge, convert_syncrim_to_veryl, convert_veryl_to_syncrim};
 
 #[derive(Clone)]
 pub struct VerylToSyncRimMapping {
@@ -44,7 +44,8 @@ pub struct HybridSimulator {
 }
 
 impl HybridSimulator {
-    pub fn new(syncrim: Simulator, 
+    pub fn new(
+        syncrim: Simulator, 
         veryl: VerylBridge,
         veryl_to_syncrim: Vec<VerylToSyncRimMapping>,
         syncrim_to_veryl: Vec<SyncRimToVerylMapping>,
